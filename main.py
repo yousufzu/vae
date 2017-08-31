@@ -13,23 +13,23 @@ class LatentAttention():
         self.n_samples = 0 #set later
 
         self.n_hidden = 500
-        self.n_z = 20
+        self.n_z = 40
         self.batchsize = 10
         self.so_far = 0 #how far we've gotten in the set
-        self.my_images = self.list_all_training_images('./data')
+        self.my_images = [] # later set to self.list_all_training_images('./data')
 
         self.images = tf.placeholder(tf.float32, [None, 256*256*3])
         image_matrix = tf.reshape(self.images,[-1, 256, 256, 3])
         z_mean, z_stddev = self.recognition(image_matrix)
         samples = tf.random_normal([self.batchsize,self.n_z], 0, 1, dtype=tf.float32)
-        guessed_z = z_mean + (z_stddev * samples)
+        self.guessed_z = z_mean + (z_stddev * samples)
 
-        self.generated_images = self.generation(guessed_z)
+        self.generated_images = self.generation(self.guessed_z)
         generated_flat = tf.reshape(self.generated_images, [self.batchsize, 256*256*3])
 
-        self.generation_loss = -tf.reduce_sum(self.images * tf.log(1e-8 + generated_flat) + (1-self.images) * tf.log(1e-8 + 1 - generated_flat),1)
+        self.generation_loss = -tf.reduce_sum(self.images * tf.log(1e-6 + generated_flat) + (1-self.images) * tf.log(1e-6 + 1 - generated_flat),1)
 
-        self.latent_loss = 0.5 * tf.reduce_sum(tf.square(z_mean) + tf.square(z_stddev) - tf.log(tf.square(z_stddev)) - 1,1)
+        self.latent_loss = 0.5 * tf.reduce_sum(tf.square(z_mean) + tf.square(z_stddev) - tf.log(1e-6 + tf.square(z_stddev)) - 1,1)
         self.cost = tf.reduce_mean(self.generation_loss + self.latent_loss)
         self.optimizer = tf.train.AdamOptimizer(0.001).minimize(self.cost)
 
@@ -104,6 +104,7 @@ class LatentAttention():
         return h7
 
     def train(self):
+        self.my_images = self.list_all_training_images('./data')
         visualization = self.get_training_images(self.batchsize)
         reshaped_vis = visualization.reshape(self.batchsize, 256, 256, 3)
         ims("results/base.jpg", merge(reshaped_vis, [5,2]))
@@ -111,7 +112,7 @@ class LatentAttention():
         saver = tf.train.Saver(max_to_keep=2)
         with tf.Session() as sess:
             sess.run(tf.initialize_all_variables())
-            for epoch in range(10):
+            for epoch in range(1000):
                 for idx in range(int(self.n_samples / self.batchsize)):
                     #batch = self.mnist.train.next_batch(self.batchsize)[0]
                     
@@ -126,6 +127,6 @@ class LatentAttention():
                         generated_test = generated_test.reshape(self.batchsize, 256, 256, 3)
                         ims("results/"+str(epoch)+".jpg",merge(generated_test, [5,2]))
 
-
-model = LatentAttention()
-model.train()
+if __name__ == '__main__':
+	model = LatentAttention()
+	model.train()
