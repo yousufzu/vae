@@ -1,8 +1,8 @@
 import tensorflow as tf
 import numpy as np
-import input_data
 import matplotlib.pyplot as plt
 import os
+import time
 from scipy.misc import imsave as ims
 from PIL import Image
 from utils import *
@@ -61,10 +61,11 @@ class LatentAttention():
         i = 0
         for image in image_subset:
             im_jpg = Image.open(image)
-            im_array = np.asarray(im_jpg).flatten()
+            im_jpg.load()
+            im_array = np.asarray(im_jpg).flatten() #Type is uint8!!!
             while im_array.shape[0] < 10: # fails to load sometimes
                 im_array = np.asarray(im_array[0]).flatten()
-            image_bytes[i] = im_array / 255.0  # feature scaling
+            image_bytes[i] = (im_array - 128) / 128  # feature scaling
             i = i+1
 
         return image_bytes
@@ -72,8 +73,6 @@ class LatentAttention():
     # encoder
     def recognition(self, input_images):
         with tf.variable_scope("recognition"):
-        
-        
             h1 = lrelu(conv2d(input_images, 3, 16, "d_h1")) # 256x256x3 -> 128x128x16
             h2 = lrelu(conv2d(h1, 16, 32, "d_h2")) # 128x128x16 -> 64x64x32
             h3 = lrelu(conv2d(h2, 32, 64, "d_h3")) # 64x64x32 -> 32x32x64
@@ -107,6 +106,8 @@ class LatentAttention():
         self.my_images = self.list_all_training_images('./data')
         visualization = self.get_training_images(self.batchsize)
         reshaped_vis = visualization.reshape(self.batchsize, 256, 256, 3)
+        reshaped_vis = (reshaped_vis * 127.5) + 127.5
+        reshaped_vis = reshaped_vis.astype(np.uint8)
         ims("results/base.jpg", merge(reshaped_vis, [5,2]))
         # train
         saver = tf.train.Saver(max_to_keep=2)
@@ -114,18 +115,23 @@ class LatentAttention():
             sess.run(tf.initialize_all_variables())
             for epoch in range(1000):
                 for idx in range(int(self.n_samples / self.batchsize)):
-                    #batch = self.mnist.train.next_batch(self.batchsize)[0]
-                    
+                   
                     batch = self.get_training_images(self.batchsize)
-                    
                     _, gen_loss, lat_loss = sess.run((self.optimizer, self.generation_loss, self.latent_loss), feed_dict={self.images: batch})
+                    
+                    
+                    
                     # dumb hack to print cost every epoch
                     if idx % (self.n_samples - 3) == 0:
                         print("epoch %d: genloss %f latloss %f" % (epoch, np.mean(gen_loss), np.mean(lat_loss)))
-                        saver.save(sess, os.getcwd()+"/training/train", global_step=epoch)
                         generated_test = sess.run(self.generated_images, feed_dict={self.images: visualization})
                         generated_test = generated_test.reshape(self.batchsize, 256, 256, 3)
+                        generated_test = (generated_test * 127.5) + 127.5
+                        generated_test = generated_test.astype(np.uint8)
                         ims("results/"+str(epoch)+".jpg",merge(generated_test, [5,2]))
+                        
+                if epoch % 11 == 0:
+                    saver.save(sess, os.getcwd()+"/training/train", global_step=epoch)
 
 if __name__ == '__main__':
 	model = LatentAttention()
